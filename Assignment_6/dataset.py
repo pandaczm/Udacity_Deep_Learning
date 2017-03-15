@@ -26,16 +26,18 @@ class Dataset:
         for char in text:
             if char not in (string.ascii_lowercase + " "):
                 text = text.replace(char, " ")
+        # print text[0:100]
         if num_gram == 0:
             text_grams = text.split()
             count = [['UNK', -1]]
             count.extend(collections.Counter(text_grams).most_common(50000 - 1))
+            # print count[0:10]
             grams2id = dict()
             for word, _ in count:
                 grams2id[word] = len(grams2id)
 
             unk_count = 0
-            for word in text:
+            for word in text_grams:
                 if word in grams2id:
                     index = grams2id[word]
                 else:
