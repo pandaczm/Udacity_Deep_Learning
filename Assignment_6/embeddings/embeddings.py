@@ -64,25 +64,6 @@ class Skim_Gram_Embeddings:
 
 
 
-    # def session_run(self, num_steps):
-    #     with tf.Session(graph=self.graph) as session:
-    #         tf.global_variables_initializer().run()
-    #         print ("initialized")
-    #         average_loss = 0
-    #         for step in range(num_steps):
-    #             batch_data, batcher_labels = self.batcher.Skim_Gram_batch()
-    #             feed_dict = {self.train_dataset:batch_data, self.train_labels:batcher_labels}
-    #             _, loss = session.run([self.optimizer, self.loss], feed_dict=feed_dict)
-    #             average_loss += loss
-    #             if step % 2000 == 0:
-    #                 if step > 0:
-    #                     average_loss = average_loss / 2000
-    #                     print ('Average loss at step %d: %f' % (step, average_loss))
-    #                     average_loss = 0
-    #         return self.normalized_embeddigns.eval()
-
-
-
 
 class CBOW_Embeddings:
     def __init__(self, batcher, vocabulary_size, embedding_size, num_sampled):
@@ -108,10 +89,14 @@ class CBOW_Embeddings:
 
         embed = tf.nn.embedding_lookup(embeddings, self.train_dataset)
         CBOW_embed = tf.segment_sum(embed, segment_ids=tf.constant(segment_ids))
-        self.loss = tf.reduce_mean(tf.nn.sampled_softmax_loss(weights = softmax_weights, biases=softmax_biases,inputs=embed,num_sampled=self.num_sampled,    num_classes=self.vocabulary_size, labels=self.train_labels))
+        self.loss = tf.reduce_mean(tf.nn.sampled_softmax_loss(weights = softmax_weights, biases=softmax_biases,inputs=CBOW_embed,num_sampled=self.num_sampled,    num_classes=self.vocabulary_size, labels=self.train_labels))
         self.optimizer = tf.train.AdagradOptimizer(1.0).minimize(self.loss)
         norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings),1, keep_dims = True))
         self.normalized_embeddigns = embeddings / norm
+        self.valid_examples = np.array(random.sample(range(100),16))
+        valid_dataset = tf.constant(self.valid_examples, dtype=tf.int32)
+        self.valid_embeddings = tf.nn.embedding_lookup(self.normalized_embeddigns, valid_dataset)
+        self.simlarity = tf.matmul(self.valid_embeddings, tf.transpose(self.normalized_embeddigns))
 
     def session_run(self, session, train_data, train_label):
         return session.run([self.optimizer,self.loss], feed_dict = {self.train_dataset: train_data, self.train_labels:train_label})
@@ -120,7 +105,7 @@ class CBOW_Embeddings:
 
 
 
-def seesion_run(batcher, vocabulary_size, embedding_size, num_sampled, num_steps, batcher_type, id2gram):
+def session_run(batcher, vocabulary_size, embedding_size, num_sampled, num_steps, batcher_type, id2gram):
     graph = tf.Graph()
     with graph.as_default(), tf.device('/cpu:0'):
         if batcher_type == 'Skim Gram':
@@ -152,10 +137,10 @@ def seesion_run(batcher, vocabulary_size, embedding_size, num_sampled, num_steps
                     top_k = 8
                     nearest = (-sim[i, :]).argsort()[1:top_k+1]
                     log = 'Nearest to %s:' % valid_word
-                for k in range(top_k):
-                    close_word = id2gram[nearest[k]]
-                    log = '%s %s,' % (log, close_word)
-                print(log)
+                    for k in range(top_k):
+                        close_word = id2gram[nearest[k]]
+                        log = '%s %s,' % (log, close_word)
+                    print(log)
 
 
 
