@@ -5,6 +5,7 @@ import string
 import collections
 import zipfile
 import tensorflow as tf
+import random
 
 
 
@@ -138,6 +139,30 @@ class DatasetWithEmbeddings:
     def get_embedding_size(self):
         return self.embeddings.shape[1]
 
+    def sample_distribution(self,distribution):
+        """Sample one element from a distribution assumed to be an array of normalized
+        probabilities.
+        """
+        distribution = distribution.reshape(self.get_embedding_size())
+        r = random.uniform(0, 1)
+        s = 0
+        for i in range(len(distribution)):
+            s += distribution[i]
+            if s >= r:
+                return i
+        return len(distribution) - 1
+
+    def get_id_from_predict_embedding(self, embedding):
+        # print embedding
+        # print embedding
+        simlarity = np.dot(embedding, np.transpose(self.embeddings))
+        nearest = self.sample_distribution(simlarity)
+        # print nearest
+        return nearest
+
+    def get_embedding_from_id(self,id):
+        return self.embeddings[id].reshape((1,self.get_embedding_size()))
+
     def get_gram_from_embedding(self, embedding):
         # print embedding
         # print embedding
@@ -145,7 +170,6 @@ class DatasetWithEmbeddings:
         nearest = simlarity.argmax()
         # print nearest
         return self.processed_data.get_gram_from_id(nearest)
-
 
         # embedding_np = np.array(embedding)
         # current_dist = np.inf
@@ -161,7 +185,7 @@ class DatasetWithEmbeddings:
         id = self.processed_data.get_id_from_gram(gram)
         return self.embeddings[id]
 
-    def get_gram(self, id):
+    def get_gram_from_id(self, id):
         return self.processed_data.get_gram_from_id(id)
 
     def get_grams_len(self):
