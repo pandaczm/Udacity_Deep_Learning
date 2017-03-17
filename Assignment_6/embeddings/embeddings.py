@@ -5,6 +5,7 @@ import tensorflow as tf
 import numpy as np
 import random
 
+
 class Skim_Gram_Embeddings:
     def __init__(self, batcher, vocabulary_size, embedding_size, num_sampled):
         self.batcher = batcher
@@ -148,6 +149,8 @@ def session_run(batcher, vocabulary_size, embedding_size, num_sampled, num_steps
         return m.normalized_embeddigns.eval()
 
 
+
+## test ##
 class Skim_Gram_Embeddings_test:
     # def __init__(self, batcher, vocabulary_size, embedding_size, num_sampled):
     #     self.batcher = batcher

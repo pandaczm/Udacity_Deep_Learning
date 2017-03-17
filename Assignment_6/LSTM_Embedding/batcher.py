@@ -22,10 +22,10 @@ class BatchGenerator:
 
   def _next_batch(self):
     """Generate a single batch from the current cursor position in the data."""
-    batch = np.zeros(shape=(self.batch_size, self.embeddings_size), dtype=np.float)
-    label = np.ndarray(shape=(self.batch_size, 1), dtype=np.int32)
+    batch = np.zeros(shape=(self.batch_size), dtype=np.int)
+    label = np.zeros(shape=(self.batch_size,1), dtype = np.int)
     for b in range(self.batch_size):
-        batch[b] = self.dataset_embeddings.get_embedding_in_id(self.text[self._cursor[b]])
+        batch[b] = self.text[self._cursor[b]]
         label[b,0] = self.text[self._cursor[b]]
         self._cursor[b] = (self._cursor[b] + 1) % self.text_size
     return batch, label
@@ -40,8 +40,8 @@ class BatchGenerator:
         a, b = self._next_batch()
         batches.append(a)
         labels.append(b)
-    self._last_batch = [batches[-1],labels[-1]]
-    return batches, labels
+    self._last_batch = [batches[-1], labels[-1]]
+    return batches
 
 
 if __name__ == "__main__":

@@ -143,7 +143,7 @@ class DatasetWithEmbeddings:
         """Sample one element from a distribution assumed to be an array of normalized
         probabilities.
         """
-        distribution = distribution.reshape(self.get_embedding_size())
+        distribution = distribution.reshape(self.embeddings.shape[0])
         r = random.uniform(0, 1)
         s = 0
         for i in range(len(distribution)):
