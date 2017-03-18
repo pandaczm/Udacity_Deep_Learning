@@ -8,16 +8,17 @@ class BatchConfig(object):
         self.num_unrollings = num_unrollings
 
 class BatchGenerator:
-  def __init__(self, batchconfig, datasetwithembeddings):
-    self.dataset_embeddings = datasetwithembeddings
-    self.text = datasetwithembeddings.processed_data.grams_id_from_text
-    self.text_size = datasetwithembeddings.processed_data.total_grams_len
+  def __init__(self, batchconfig, dataset):
+    self.dataset = dataset
+    self.text = dataset.grams_id_from_text
+    self.text_size = dataset.total_grams_len
     self.batch_size = batchconfig.batch_size
     self.num_unrollings = batchconfig.num_unrollings
+    self.vocabulary_size = dataset.vocabulary_size
     segment = self.text_size // self.batch_size
     self._cursor = [offset * segment for offset in range(self.batch_size)]
 
-    self.embeddings_size = self.dataset_embeddings.embeddings_size
+
     self._last_batch = self._next_batch()
 
   def _next_batch(self):
@@ -41,7 +42,7 @@ class BatchGenerator:
         batches.append(a)
         labels.append(b)
     self._last_batch = [batches[-1], labels[-1]]
-    return batches
+    return batches, labels
 
 
 if __name__ == "__main__":

@@ -36,19 +36,23 @@ class LSTMGenerater(object):
         saved_output = tf.Variable(tf.zeros([self.batch_size, self.num_nodes]), trainable=False)
         saved_state = tf.Variable(tf.zeros([self.batch_size, self.num_nodes]), trainable=False)
 
-        w = tf.Variable(tf.truncated_normal([self.num_nodes, self.embedding_size], -0.1, 0.1))
-        b = tf.Variable(tf.zeros([self.embedding_size]))
-
+        w = tf.Variable(tf.truncated_normal([self.num_nodes, self.vocabulary_size], -0.1, 0.1))
+        b = tf.Variable(tf.zeros([self.vocabulary_size]))
+        # print w, b
         # embedding variable
-        embeddings = tf.Variable(tf.random_uniform([600, self.embedding_size], -1.0, 1.0))
-        print embeddings
+        embeddings = tf.Variable(tf.random_uniform([self.vocabulary_size, self.embedding_size], -1.0, 1.0))
+        # print embeddings
 
         self.train_data = list()
+        self.train_label = list()
 
         for i in range(self.num_unrollings + 1):
             self.train_data.append(tf.placeholder(tf.int32, shape = [self.batch_size]))
+            self.train_label.append(tf.placeholder(tf.float32, shape = [self.batch_size, 1]))
 
         train_inputs = self.train_data[: self.num_unrollings]
+        train_labels = self.train_label[1:]
+        # print train_labels
 
 
 
@@ -68,9 +72,10 @@ class LSTMGenerater(object):
         output = saved_output
         state = saved_state
         for i in train_inputs:
-            print i
+            # print i
             input_embed = tf.nn.embedding_lookup(embeddings, i)
-            print input_embed
+            # print embeddings
+            # print input_embed
             output, state = lstm_cell(input_embed, output, state)
             outputs.append(output)
 
@@ -92,11 +97,12 @@ class LSTMGenerater(object):
 
 
 
-        self.sample_input = tf.placeholder(tf.float32, shape=[1, self.embedding_size])
+        self.sample_input = tf.placeholder(tf.int32, shape=[1])
+        sample_embedding = tf.nn.embedding_lookup(embeddings, self.sample_input)
         saved_sample_output = tf.Variable(tf.zeros([1, self.num_nodes]))
         saved_sample_state = tf.Variable(tf.zeros([1, self.num_nodes]))
         self.reset_sample_state = tf.group(saved_sample_output.assign(tf.zeros([1, self.num_nodes])),saved_sample_state.assign(tf.zeros([1, self.num_nodes])))
-        sample_output, sample_state = lstm_cell(self.sample_input, saved_sample_output, saved_sample_state)
+        sample_output, sample_state = lstm_cell(sample_embedding, saved_sample_output, saved_sample_state)
         with tf.control_dependencies([saved_sample_output.assign(sample_output),
                                 saved_sample_state.assign(sample_state)]):
             self.sample_prediction = tf.nn.softmax(tf.nn.xw_plus_b(sample_output, w, b))
@@ -105,29 +111,48 @@ class LSTMGenerater(object):
 
 
 
-
     def random_distribution(self):
-        b = np.random.uniform(0.0, 1.0, size = [1,self.embedding_size])
-        return b / np.sum(b,1)[:,None]
+        b = np.random.randint(0,self.vocabulary_size)
+        return np.array([b])
 
 
 
-    def session_run(self, session, batches):
+    def session_run(self, session, batches, labels):
         feed_dict = dict()
         for i in range(self.num_unrollings + 1):
             feed_dict[self.train_data[i]] = batches[i]
+            feed_dict[self.train_label[i]] = labels[i]
 
 
         return session.run([self.optimizer, self.loss, self.train_prediction, self.learning_rate], feed_dict = feed_dict)
+
+
+def label_to_one_hot(labels, vocabulary_size):
+    label_one_hot = np.zeros(shape=(labels.shape[0], vocabulary_size), dtype=np.float)
+    for index in range(labels.shape[0]):
+        label_one_hot[index, labels[index,0]] = 1.0
+    return label_one_hot
 
 def logprob(predictions, labels):
     predictions[predictions < 1e-10] = 1e-10
     return np.sum(np.multiply(labels, -np.log(predictions))) / labels.shape[0]
 
+def sample_distribution(distribution):
+    """Sample one element from a distribution assumed to be an array of normalized
+    probabilities.
+    """
+    r = random.uniform(0, 1)
+    s = 0
+    for i in range(len(distribution)):
+        s += distribution[i]
+        if s >= r:
+            return i
+    return len(distribution) - 1
+
 def LSTM_Session_Run(train_lstmbatcher, valid_lstmbatcher, embeddings_size, num_nodes, num_steps,sample_frequency, num_sampeled):
     graph = tf.Graph()
     train_batch_size = train_lstmbatcher.batch_size
-    vocabulary_size = train_lstmbatcher.embeddings_size
+    vocabulary_size = train_lstmbatcher.vocabulary_size
     num_unrollings = train_lstmbatcher.num_unrollings
 
     with graph.as_default():
@@ -138,38 +163,40 @@ def LSTM_Session_Run(train_lstmbatcher, valid_lstmbatcher, embeddings_size, num_
         print('Initialized')
         mean_loss = 0
         for step in range(num_steps):
-            batches = train_lstmbatcher.next()
+            batches, labels = train_lstmbatcher.next()
             # print batches
-            _, l, prediction, lr = lstmgen.session_run(session,batches)
+            _, l, prediction, lr = lstmgen.session_run(session,batches,labels)
             mean_loss += l
             if step % sample_frequency == 0:
                 if step > 0:
                     mean_loss = mean_loss / sample_frequency
                 print('Average loss at step %d: %f learning rate: %f' % (step, mean_loss, lr))
                 mean_loss = 0
-                labels = np.concatenate(list(batches)[1:])
-                print('Minibatch perplexity: %.2f' % float(np.exp(logprob(prediction, labels))))
+                label_no = np.concatenate(list(labels)[1:])
+                label_one_hot = label_to_one_hot(label_no, vocabulary_size)
+                print('Minibatch perplexity: %.2f' % float(np.exp(logprob(prediction, label_one_hot))))
 
                 if step % (sample_frequency * 10) == 0:
                     print ('=' * 80)
                     for _ in range(5):
-                        random_embeddings = lstmgen.random_distribution()
-                        random_embeddings_id = train_lstmbatcher.dataset_embeddings.get_id_from_predict_embedding(random_embeddings)
-                        feed = train_lstmbatcher.dataset_embeddings.get_embedding_from_id(random_embeddings_id)
-                        sentence = train_lstmbatcher.dataset_embeddings.get_gram_from_id(random_embeddings_id)
+                        feed = lstmgen.random_distribution()
+                        sentence = train_lstmbatcher.dataset.get_gram_from_id(feed[0])
                         lstmgen.reset_sample_state.run()
                         for _ in range(79):
                             prediction = lstmgen.sample_prediction.eval({lstmgen.sample_input:feed})
                             # print prediction.shape
-                            prediction_id = train_lstmbatcher.dataset_embeddings.get_id_from_predict_embedding(prediction)
-                            feed = train_lstmbatcher.dataset_embeddings.get_embedding_from_id(prediction_id)
-                            sentence += train_lstmbatcher.dataset_embeddings.get_gram_from_id(prediction_id)
+                            prediction_id = sample_distribution(prediction[0])
+                            feed = np.array([prediction_id])
+
+                            sentence += train_lstmbatcher.dataset.get_gram_from_id(prediction_id)
                         print (sentence)
                     print ('=' * 80)
                     lstmgen.reset_sample_state.run()
                 valid_logprob = 0
                 for _ in range(valid_lstmbatcher.text_size):
-                    b = valid_lstmbatcher.next()
+                    b, valid_label = valid_lstmbatcher.next()
+                    valid_label_no = np.concatenate(list(valid_label)[1:])
                     predictions = lstmgen.sample_prediction.eval({lstmgen.sample_input: b[0]})
-                    valid_logprob = valid_logprob + logprob(predictions, b[1])
+                    valid_label_one_hot = label_to_one_hot(valid_label_no,vocabulary_size)
+                    valid_logprob = valid_logprob + logprob(predictions, valid_label_one_hot)
                 print('Validation set perplexity: %.2f' % float(np.exp(valid_logprob / valid_lstmbatcher.text_size)))
